@@ -24,7 +24,7 @@ type SocketClient struct {
 	conn        *websocket.Conn
 }
 
-// SocketMessage is the struct that we send and receive from the javascript side of the webui
+// SocketMessage is the struct that we send and receive from the javascript side
 type SocketMessage struct {
 	EventName string `json:"eventName"`
 	Content   string `json:"content"`

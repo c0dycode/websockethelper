@@ -6,17 +6,17 @@ import (
 	"time"
 )
 
-// LogType determines the color of the webui log-output for that specific item
+// LogType can be used to differentiate between different errorlevels
 type LogType int
 
 const (
 	logBufferSize = 250
 
-	// LogOk green message in the webui log
+	// LogOk for general logs
 	LogOk LogType = 0
-	// LogInfo yellow message in the webui log
+	// LogInfo is used for warnings or information
 	LogInfo LogType = 1
-	// LogError red message in the webui log
+	// LogError is used for errors
 	LogError LogType = 2
 )
 
