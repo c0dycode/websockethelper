@@ -83,7 +83,11 @@ func (wh *WebSocketHub) Run() {
 }
 
 func broadcastMessages(msgToSend SocketMessage) {
-	hub.broadcast <- msgToSend
+	if hub != nil {
+		hub.broadcast <- msgToSend
+	} else {
+		logBuffer <- msgToSend
+	}
 }
 
 // RegisterCallback allows you to register functions outside of this package to be called on specific eventnames
