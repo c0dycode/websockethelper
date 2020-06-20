@@ -24,7 +24,6 @@ var (
 	hub       *WebSocketHub
 	logBuffer chan SocketMessage
 	callbacks map[string][]func(SocketMessage)
-	sm        sync.RWMutex
 )
 
 // WebSocketHub keeps track of the connections and registers and unregisters them
@@ -33,20 +32,24 @@ type WebSocketHub struct {
 	register   chan *SocketClient
 	unregister chan *SocketClient
 	broadcast  chan SocketMessage
+	sync.RWMutex
 }
 
 func init() {
 	logBuffer = make(chan SocketMessage, logBufferSize)
 	callbacks = make(map[string][]func(SocketMessage))
+	hub = GetHub()
 }
 
-// NewHub returns a new WebSocketHub
-func NewHub() *WebSocketHub {
-	hub = &WebSocketHub{
-		clients:    make(map[*SocketClient]bool),
-		register:   make(chan *SocketClient),
-		unregister: make(chan *SocketClient),
-		broadcast:  make(chan SocketMessage, 250),
+// GetHub returns a new WebSocketHub
+func GetHub() *WebSocketHub {
+	if hub == nil {
+		hub = &WebSocketHub{
+			clients:    make(map[*SocketClient]bool),
+			register:   make(chan *SocketClient),
+			unregister: make(chan *SocketClient),
+			broadcast:  make(chan SocketMessage, 250),
+		}
 	}
 	return hub
 }
@@ -56,10 +59,10 @@ func (wh *WebSocketHub) Run() {
 	for {
 		select {
 		case client := <-wh.register:
+			wh.Lock()
 			wh.clients[client] = true
-			sm.Lock()
 			client.callbacks = callbacks
-			sm.Unlock()
+			wh.Unlock()
 		case client := <-wh.unregister:
 			if _, ok := wh.clients[client]; ok {
 				delete(wh.clients, client)
@@ -69,13 +72,15 @@ func (wh *WebSocketHub) Run() {
 		case msg := <-wh.broadcast:
 			if len(wh.clients) == 0 {
 				logBuffer <- msg
-			}
-			for client := range wh.clients {
-				select {
-				case client.sendChannel <- msg:
-				default:
-					close(client.sendChannel)
-					delete(wh.clients, client)
+			} else {
+				for client := range wh.clients {
+					select {
+					case client.sendChannel <- msg:
+					default:
+						close(client.sendChannel)
+						delete(wh.clients, client)
+						break
+					}
 				}
 			}
 		}
@@ -92,8 +97,6 @@ func broadcastMessages(msgToSend SocketMessage) {
 
 // RegisterCallback allows you to register functions outside of this package to be called on specific eventnames
 func RegisterCallback(eventName string, f func(SocketMessage)) {
-	sm.Lock()
-	defer sm.Unlock()
 	for client := range hub.clients {
 		var found bool = false
 		if ac, _ := client.callbacks[eventName]; ac != nil {

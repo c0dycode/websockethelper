@@ -44,6 +44,11 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 		hub:         hub,
 		conn:        ws,
 	}
+	client.hub.register <- client
+
+	go client.writePump()
+	go client.readPump()
+
 	for {
 		if len(logBuffer) > 0 {
 			if msg, ok := <-logBuffer; ok {
@@ -53,9 +58,6 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	client.hub.register <- client
-	go client.readPump()
-	go client.writePump()
 }
 
 func (s *SocketClient) writePump() {
@@ -92,8 +94,8 @@ func (s *SocketClient) readPump() {
 			var msg SocketMessage
 			err = json.Unmarshal(b, &msg)
 			if err == nil && len(s.readChannel) < channelSize {
-				sm.RLock()
-				defer sm.RUnlock()
+				hub.RLock()
+				defer hub.RUnlock()
 				if action, ok := s.callbacks[msg.EventName]; ok {
 					for _, ac := range action {
 						ac(msg)
