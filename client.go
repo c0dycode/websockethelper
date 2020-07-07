@@ -12,7 +12,7 @@ import (
 
 const (
 	// Constant for the amount of items a channel can hold before blocking
-	channelSize = 100
+	channelSize = 50
 )
 
 // SocketClient is the struct that stores the webSocket Connection
@@ -33,7 +33,13 @@ type SocketMessage struct {
 
 // ServeWS is the handler for requests to connect via websocket
 func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
-	ws, err := websocket.Upgrade(w, r, nil, 2048, 2048)
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:   2048,
+		WriteBufferSize:  2048,
+		HandshakeTimeout: 1000,
+		CheckOrigin:      func(r *http.Request) bool { return true },
+	}
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,16 +54,6 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 
 	go client.writePump()
 	go client.readPump()
-
-	for {
-		if len(logBuffer) > 0 {
-			if msg, ok := <-logBuffer; ok {
-				client.sendChannel <- msg
-			}
-		} else {
-			break
-		}
-	}
 }
 
 func (s *SocketClient) writePump() {
