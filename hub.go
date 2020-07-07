@@ -10,8 +10,6 @@ import (
 type LogType int
 
 const (
-	logBufferSize = 250
-
 	// LogOk for general logs
 	LogOk LogType = 0
 	// LogInfo is used for warnings or information
@@ -22,21 +20,21 @@ const (
 
 var (
 	hub       *WebSocketHub
-	logBuffer chan SocketMessage
 	callbacks map[string][]func(SocketMessage)
 )
 
 // WebSocketHub keeps track of the connections and registers and unregisters them
 type WebSocketHub struct {
-	clients    map[*SocketClient]bool
-	register   chan *SocketClient
-	unregister chan *SocketClient
-	broadcast  chan SocketMessage
+	clients     map[*SocketClient]bool
+	register    chan *SocketClient
+	unregister  chan *SocketClient
+	broadcast   chan SocketMessage
+	logMessages []SocketMessage
 	sync.RWMutex
 }
 
 func init() {
-	logBuffer = make(chan SocketMessage, logBufferSize)
+	// logBuffer = make(chan SocketMessage, logBufferSize)
 	callbacks = make(map[string][]func(SocketMessage))
 	hub = GetHub()
 }
@@ -62,6 +60,10 @@ func (wh *WebSocketHub) Run() {
 			wh.Lock()
 			wh.clients[client] = true
 			client.callbacks = callbacks
+
+			for _, msg := range wh.logMessages {
+				client.sendChannel <- msg
+			}
 			wh.Unlock()
 		case client := <-wh.unregister:
 			if _, ok := wh.clients[client]; ok {
@@ -70,17 +72,13 @@ func (wh *WebSocketHub) Run() {
 				close(client.readChannel)
 			}
 		case msg := <-wh.broadcast:
-			if len(wh.clients) == 0 {
-				logBuffer <- msg
-			} else {
-				for client := range wh.clients {
-					select {
-					case client.sendChannel <- msg:
-					default:
-						close(client.sendChannel)
-						delete(wh.clients, client)
-						break
-					}
+			for client := range wh.clients {
+				select {
+				case client.sendChannel <- msg:
+				default:
+					close(client.sendChannel)
+					delete(wh.clients, client)
+					break
 				}
 			}
 		}
@@ -90,8 +88,6 @@ func (wh *WebSocketHub) Run() {
 func broadcastMessages(msgToSend SocketMessage) {
 	if hub != nil {
 		hub.broadcast <- msgToSend
-	} else {
-		logBuffer <- msgToSend
 	}
 }
 
@@ -141,5 +137,6 @@ func SendLogMessageToWS(message string, errorType LogType) {
 		msg.Error = "error"
 		break
 	}
+	hub.logMessages = append(hub.logMessages, msg)
 	broadcastMessages(msg)
 }
