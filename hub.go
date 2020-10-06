@@ -72,6 +72,7 @@ func (wh *WebSocketHub) Run() {
 				close(client.readChannel)
 			}
 		case msg := <-wh.broadcast:
+			wh.logMessages = append(wh.logMessages, msg)
 			for client := range wh.clients {
 				select {
 				case client.sendChannel <- msg:
@@ -137,6 +138,5 @@ func SendLogMessageToWS(message string, errorType LogType) {
 		msg.Error = "error"
 		break
 	}
-	hub.logMessages = append(hub.logMessages, msg)
 	broadcastMessages(msg)
 }
