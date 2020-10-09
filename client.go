@@ -72,6 +72,10 @@ func (s *SocketClient) writePump() {
 				}
 				break
 			}
+			if !ok {
+				s.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
 		default:
 			break
 		}
