@@ -1,15 +1,17 @@
-// +build fast
-
 package websockethelper
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"runtime/debug"
 	"time"
 
-	"github.com/fasthttp/websocket"
-	"github.com/valyala/fasthttp"
+	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 const (
@@ -29,6 +31,7 @@ type SocketClient struct {
 }
 
 // SocketMessage is the struct that we send and receive from the javascript side
+//easyjson:json
 type SocketMessage struct {
 	EventName string `json:"eventName"`
 	Content   string `json:"content"`
@@ -36,20 +39,17 @@ type SocketMessage struct {
 }
 
 // ServeWS is the handler for requests to connect via websocket
-func ServeWS(hub *WebSocketHub, ctx *fasthttp.RequestCtx) {
-	var upgrader = websocket.FastHTTPUpgrader{
-		ReadBufferSize:   2048,
-		WriteBufferSize:  2048,
+func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
+	var upgrader = websocket.Upgrader{
+		// ReadBufferSize:   2048,
+		// WriteBufferSize:  2048,
 		HandshakeTimeout: 1000,
+		CheckOrigin:      func(r *http.Request) bool { return true },
 	}
-	err := upgrader.Upgrade(ctx, wsLoop)
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func wsLoop(ws *websocket.Conn) {
-	defer ws.Close()
 	client := &SocketClient{
 		sendChannel: make(chan SocketMessage, channelSize),
 		readChannel: make(chan SocketMessage, channelSize),
@@ -60,21 +60,35 @@ func wsLoop(ws *websocket.Conn) {
 	client.hub.register <- client
 
 	go client.writePump()
-	client.readPump()
-
-	client.hub.unregister <- client
+	go client.readPump()
 }
 
 func (s *SocketClient) writePump() {
+	defer func() {
+		s.conn.Close()
+		s.hub.unregister <- s
+	}()
 	for {
 		select {
 		case msg, ok := <-s.sendChannel:
 			if len(msg.Content) > 0 && ok {
-				err := s.conn.WriteJSON(msg)
+				w, err := s.conn.NextWriter(websocket.TextMessage)
+				if err != nil {
+					fmt.Printf("failed to retrieve next writer: %v\n", err)
+					break
+				}
+
+				b, err := msg.MarshalJSON()
+				b, err = msgpack.Marshal(&msg)
+
+				r := bytes.NewReader(b)
+				_, err = io.Copy(w, r)
+				// err := s.conn.WriteJSON(msg)
 				if err != nil {
 					fmt.Printf("error while writing json: %v\n", err)
 					break
 				}
+				debug.FreeOSMemory()
 				break
 			}
 		default:
@@ -88,10 +102,18 @@ func (s *SocketClient) writePump() {
 }
 
 func (s *SocketClient) readPump() {
+	defer func() {
+		s.conn.Close()
+		s.hub.unregister <- s
+	}()
+	// s.conn.SetPongHandler(func(string) error {
+	// 	s.conn.SetReadDeadline(time.Now().Add(pongWait))
+	// 	return nil
+	// })
 	for {
 		_, b, err := s.conn.ReadMessage()
 		if err == nil {
-			var msg SocketMessage
+			msg := SocketMessage{}
 			err = json.Unmarshal(b, &msg)
 			if err == nil && len(s.readChannel) < channelSize {
 				hub.RLock()

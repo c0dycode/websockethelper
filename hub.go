@@ -1,5 +1,3 @@
-// +build fast
-
 package websockethelper
 
 import (
@@ -23,6 +21,7 @@ const (
 var (
 	hub       *WebSocketHub
 	callbacks map[string][]func(SocketMessage)
+	shutdown  bool
 )
 
 // WebSocketHub keeps track of the connections and registers and unregisters them
@@ -54,6 +53,10 @@ func GetHub() *WebSocketHub {
 	return hub
 }
 
+func shutdownHub() {
+	shutdown = true
+}
+
 // Run starts the WebSocketHub and manages connections
 func (wh *WebSocketHub) Run() {
 	for {
@@ -74,7 +77,9 @@ func (wh *WebSocketHub) Run() {
 				close(client.readChannel)
 			}
 		case msg := <-wh.broadcast:
-			wh.logMessages = append(wh.logMessages, msg)
+			if msg.EventName == "LogMessage" {
+				wh.logMessages = append(wh.logMessages, msg)
+			}
 			for client := range wh.clients {
 				select {
 				case client.sendChannel <- msg:
@@ -84,13 +89,17 @@ func (wh *WebSocketHub) Run() {
 					break
 				}
 			}
+		default:
+			if shutdown == true {
+				return
+			}
 		}
 	}
 }
 
-func broadcastMessages(msgToSend SocketMessage) {
+func broadcastMessages(msgToSend *SocketMessage) {
 	if hub != nil {
-		hub.broadcast <- msgToSend
+		hub.broadcast <- *msgToSend
 	}
 }
 
@@ -113,7 +122,7 @@ func RegisterCallback(eventName string, f func(SocketMessage)) {
 }
 
 // SendMessageToWS adds the message formatted to the SendChannel
-func SendMessageToWS(message SocketMessage) error {
+func SendMessageToWS(message *SocketMessage) error {
 	broadcastMessages(message)
 	return nil
 }
@@ -140,5 +149,5 @@ func SendLogMessageToWS(message string, errorType LogType) {
 		msg.Error = "error"
 		break
 	}
-	broadcastMessages(msg)
+	broadcastMessages(&msg)
 }
