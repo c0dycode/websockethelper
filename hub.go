@@ -90,7 +90,7 @@ func (wh *WebSocketHub) Run() {
 				}
 			}
 		default:
-			if shutdown == true {
+			if shutdown {
 				return
 			}
 		}
@@ -107,7 +107,7 @@ func broadcastMessages(msgToSend *SocketMessage) {
 func RegisterCallback(eventName string, f func(SocketMessage)) {
 	for client := range hub.clients {
 		var found bool = false
-		if ac, _ := client.callbacks[eventName]; ac != nil {
+		if ac := client.callbacks[eventName]; ac != nil {
 			for _, a := range ac {
 				if &a == &f {
 					found = true
@@ -122,9 +122,8 @@ func RegisterCallback(eventName string, f func(SocketMessage)) {
 }
 
 // SendMessageToWS adds the message formatted to the SendChannel
-func SendMessageToWS(message *SocketMessage) error {
+func SendMessageToWS(message *SocketMessage) {
 	broadcastMessages(message)
-	return nil
 }
 
 // SendLogMessageToWS adds the message formatted to the SendChannel
