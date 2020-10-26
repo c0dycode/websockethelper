@@ -1,18 +1,22 @@
+// +build fast
+
 package websockethelper
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/fasthttp/websocket"
+	"github.com/valyala/fasthttp"
 )
 
 const (
 	// Constant for the amount of items a channel can hold before blocking
 	channelSize = 50
+
+	pongWait = 15 * time.Second
 )
 
 // SocketClient is the struct that stores the webSocket Connection
@@ -32,17 +36,20 @@ type SocketMessage struct {
 }
 
 // ServeWS is the handler for requests to connect via websocket
-func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
-	var upgrader = websocket.Upgrader{
+func ServeWS(hub *WebSocketHub, ctx *fasthttp.RequestCtx) {
+	var upgrader = websocket.FastHTTPUpgrader{
 		ReadBufferSize:   2048,
 		WriteBufferSize:  2048,
 		HandshakeTimeout: 1000,
-		CheckOrigin:      func(r *http.Request) bool { return true },
 	}
-	ws, err := upgrader.Upgrade(w, r, nil)
+	err := upgrader.Upgrade(ctx, wsLoop)
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func wsLoop(ws *websocket.Conn) {
+	defer ws.Close()
 	client := &SocketClient{
 		sendChannel: make(chan SocketMessage, channelSize),
 		readChannel: make(chan SocketMessage, channelSize),
@@ -53,14 +60,12 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 	client.hub.register <- client
 
 	go client.writePump()
-	go client.readPump()
+	client.readPump()
+
+	client.hub.unregister <- client
 }
 
 func (s *SocketClient) writePump() {
-	defer func() {
-		s.hub.unregister <- s
-		s.conn.Close()
-	}()
 	for {
 		select {
 		case msg, ok := <-s.sendChannel:
@@ -68,15 +73,14 @@ func (s *SocketClient) writePump() {
 				err := s.conn.WriteJSON(msg)
 				if err != nil {
 					fmt.Printf("error while writing json: %v\n", err)
-					return
+					break
 				}
 				break
 			}
-			if !ok {
-				s.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
 		default:
+			if err := s.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				break
+			}
 			break
 		}
 		time.Sleep(time.Millisecond * 50)
@@ -84,10 +88,6 @@ func (s *SocketClient) writePump() {
 }
 
 func (s *SocketClient) readPump() {
-	defer func() {
-		s.hub.unregister <- s
-		s.conn.Close()
-	}()
 	for {
 		_, b, err := s.conn.ReadMessage()
 		if err == nil {
@@ -103,7 +103,10 @@ func (s *SocketClient) readPump() {
 				}
 			}
 		} else {
-			return
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
+			break
 		}
 		time.Sleep(time.Millisecond * 50)
 	}

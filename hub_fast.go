@@ -1,3 +1,5 @@
+// +build fast
+
 package websockethelper
 
 import (
