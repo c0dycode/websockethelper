@@ -7,11 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/vmihailenco/msgpack/v5"
+	"github.com/vmihailenco/msgpack"
 )
 
 const (
@@ -72,30 +71,36 @@ func (s *SocketClient) writePump() {
 		select {
 		case msg, ok := <-s.sendChannel:
 			if len(msg.Content) > 0 && ok {
-				w, err := s.conn.NextWriter(websocket.TextMessage)
+				w, err := s.conn.NextWriter(websocket.BinaryMessage)
 				if err != nil {
 					fmt.Printf("failed to retrieve next writer: %v\n", err)
 					break
 				}
-
-				b, err := msg.MarshalJSON()
-				b, err = msgpack.Marshal(&msg)
-
+				b, err := msgpack.Marshal(&msg)
+				if err != nil {
+					fmt.Printf("failed to encode message: %s\n", err)
+					break
+				}
 				r := bytes.NewReader(b)
-				_, err = io.Copy(w, r)
-				// err := s.conn.WriteJSON(msg)
+				for {
+					_, err = io.Copy(w, r)
+					if err == nil {
+						break
+					}
+				}
 				if err != nil {
 					fmt.Printf("error while writing json: %v\n", err)
 					break
 				}
-				debug.FreeOSMemory()
-				break
+				err = w.Close()
+				if err != nil {
+					fmt.Printf("failed to close writer: %s\n", err)
+				}
 			}
 		default:
 			if err := s.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				break
 			}
-			break
 		}
 		time.Sleep(time.Millisecond * 50)
 	}
