@@ -29,8 +29,8 @@ type WebSocketHub struct {
 	clients     map[*SocketClient]bool
 	register    chan *SocketClient
 	unregister  chan *SocketClient
-	broadcast   chan SocketMessage
-	logMessages []SocketMessage
+	broadcast   chan SocketSendMessage
+	logMessages []SocketSendMessage
 	sync.RWMutex
 }
 
@@ -47,7 +47,7 @@ func GetHub() *WebSocketHub {
 			clients:    make(map[*SocketClient]bool),
 			register:   make(chan *SocketClient),
 			unregister: make(chan *SocketClient),
-			broadcast:  make(chan SocketMessage, 250),
+			broadcast:  make(chan SocketSendMessage, 250),
 		}
 	}
 	return hub
@@ -93,11 +93,12 @@ func (wh *WebSocketHub) Run() {
 			if shutdown {
 				return
 			}
+			time.Sleep(time.Millisecond * 10)
 		}
 	}
 }
 
-func broadcastMessages(msgToSend *SocketMessage) {
+func broadcastMessages(msgToSend *SocketSendMessage) {
 	if hub != nil {
 		hub.broadcast <- *msgToSend
 	}
@@ -122,7 +123,7 @@ func RegisterCallback(eventName string, f func(SocketMessage)) {
 }
 
 // SendMessageToWS adds the message formatted to the SendChannel
-func SendMessageToWS(message *SocketMessage) {
+func SendMessageToWS(message *SocketSendMessage) {
 	broadcastMessages(message)
 }
 
@@ -133,8 +134,8 @@ func SendLogMessageToWS(message string, errorType LogType) {
 	h, m, sec := t.Clock()
 	formattedMessage := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d : %s", y, mon, d, h, m, sec, message)
 
-	var msg SocketMessage
-	msg.Content = formattedMessage
+	var msg SocketSendMessage
+	msg.Content = []byte(formattedMessage)
 	msg.EventName = "LogMessage"
 
 	switch errorType {

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/vmihailenco/msgpack"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 
 // SocketClient is the struct that stores the webSocket Connection
 type SocketClient struct {
-	sendChannel chan SocketMessage
+	sendChannel chan SocketSendMessage
 	readChannel chan SocketMessage
 	callbacks   map[string][]func(SocketMessage)
 	hub         *WebSocketHub
@@ -34,6 +34,14 @@ type SocketClient struct {
 type SocketMessage struct {
 	EventName string `json:"eventName"`
 	Content   string `json:"content"`
+	Error     string `json:"error"`
+}
+
+// SocketMessage is the struct that we send and receive from the javascript side
+//easyjson:json
+type SocketSendMessage struct {
+	EventName string `json:"eventName"`
+	Content   []byte `json:"content"`
 	Error     string `json:"error"`
 }
 
@@ -50,7 +58,7 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	client := &SocketClient{
-		sendChannel: make(chan SocketMessage, channelSize),
+		sendChannel: make(chan SocketSendMessage, channelSize),
 		readChannel: make(chan SocketMessage, channelSize),
 		callbacks:   make(map[string][]func(SocketMessage)),
 		hub:         hub,
@@ -76,6 +84,11 @@ func (s *SocketClient) writePump() {
 					fmt.Printf("failed to retrieve next writer: %v\n", err)
 					break
 				}
+				// enc := msgpack.NewEncoder(w)
+				// enc.SetCustomStructTag("json")
+				//
+				// enc.Encode(&msg)
+
 				b, err := msgpack.Marshal(&msg)
 				if err != nil {
 					fmt.Printf("failed to encode message: %s\n", err)
@@ -101,6 +114,7 @@ func (s *SocketClient) writePump() {
 			if err := s.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				break
 			}
+			time.Sleep(time.Millisecond * 25)
 		}
 		time.Sleep(time.Millisecond * 50)
 	}
@@ -111,10 +125,6 @@ func (s *SocketClient) readPump() {
 		s.conn.Close()
 		s.hub.unregister <- s
 	}()
-	// s.conn.SetPongHandler(func(string) error {
-	// 	s.conn.SetReadDeadline(time.Now().Add(pongWait))
-	// 	return nil
-	// })
 	for {
 		_, b, err := s.conn.ReadMessage()
 		if err == nil {
@@ -122,12 +132,12 @@ func (s *SocketClient) readPump() {
 			err = json.Unmarshal(b, &msg)
 			if err == nil && len(s.readChannel) < channelSize {
 				hub.RLock()
-				defer hub.RUnlock()
 				if action, ok := s.callbacks[msg.EventName]; ok {
 					for _, ac := range action {
 						ac(msg)
 					}
 				}
+				hub.RUnlock()
 			}
 		} else {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -135,6 +145,6 @@ func (s *SocketClient) readPump() {
 			}
 			break
 		}
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 25)
 	}
 }

@@ -17,7 +17,92 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjsonAeb7b1d7DecodeGithubComC0dycodeWebsockethelper(in *jlexer.Lexer, out *SocketMessage) {
+func easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper(in *jlexer.Lexer, out *SocketSendMessage) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "eventName":
+			out.EventName = string(in.String())
+		case "content":
+			if in.IsNull() {
+				in.Skip()
+				out.Content = nil
+			} else {
+				out.Content = in.Bytes()
+			}
+		case "error":
+			out.Error = string(in.String())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper(out *jwriter.Writer, in SocketSendMessage) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"eventName\":"
+		out.RawString(prefix[1:])
+		out.String(string(in.EventName))
+	}
+	{
+		const prefix string = ",\"content\":"
+		out.RawString(prefix)
+		out.Base64Bytes(in.Content)
+	}
+	{
+		const prefix string = ",\"error\":"
+		out.RawString(prefix)
+		out.String(string(in.Error))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v SocketSendMessage) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v SocketSendMessage) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *SocketSendMessage) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *SocketSendMessage) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper(l, v)
+}
+func easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper1(in *jlexer.Lexer, out *SocketMessage) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -52,7 +137,7 @@ func easyjsonAeb7b1d7DecodeGithubComC0dycodeWebsockethelper(in *jlexer.Lexer, ou
 		in.Consumed()
 	}
 }
-func easyjsonAeb7b1d7EncodeGithubComC0dycodeWebsockethelper(out *jwriter.Writer, in SocketMessage) {
+func easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper1(out *jwriter.Writer, in SocketMessage) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -77,23 +162,23 @@ func easyjsonAeb7b1d7EncodeGithubComC0dycodeWebsockethelper(out *jwriter.Writer,
 // MarshalJSON supports json.Marshaler interface
 func (v SocketMessage) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjsonAeb7b1d7EncodeGithubComC0dycodeWebsockethelper(&w, v)
+	easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper1(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v SocketMessage) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonAeb7b1d7EncodeGithubComC0dycodeWebsockethelper(w, v)
+	easyjsonC0e5e3f1EncodeGithubComC0dycodeWebsockethelper1(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *SocketMessage) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjsonAeb7b1d7DecodeGithubComC0dycodeWebsockethelper(&r, v)
+	easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper1(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *SocketMessage) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjsonAeb7b1d7DecodeGithubComC0dycodeWebsockethelper(l, v)
+	easyjsonC0e5e3f1DecodeGithubComC0dycodeWebsockethelper1(l, v)
 }
