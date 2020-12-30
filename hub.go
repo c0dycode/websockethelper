@@ -84,8 +84,6 @@ func (wh *WebSocketHub) Run() {
 				select {
 				case client.sendChannel <- msg:
 				default:
-					close(client.sendChannel)
-					delete(wh.clients, client)
 					break
 				}
 			}
