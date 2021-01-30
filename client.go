@@ -71,6 +71,7 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *SocketClient) writePump() {
+	ticker := time.NewTicker(time.Millisecond * 30)
 	defer func() {
 		s.conn.Close()
 		s.hub.unregister <- s
@@ -110,13 +111,11 @@ func (s *SocketClient) writePump() {
 					fmt.Printf("failed to close writer: %s\n", err)
 				}
 			}
-		default:
+		case <-ticker.C:
 			if err := s.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				break
 			}
-			time.Sleep(time.Millisecond * 25)
 		}
-		time.Sleep(time.Millisecond * 50)
 	}
 }
 

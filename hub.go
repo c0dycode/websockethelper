@@ -59,6 +59,7 @@ func shutdownHub() {
 
 // Run starts the WebSocketHub and manages connections
 func (wh *WebSocketHub) Run() {
+	ticker := time.NewTicker(time.Millisecond * 20)
 	for {
 		select {
 		case client := <-wh.register:
@@ -87,11 +88,11 @@ func (wh *WebSocketHub) Run() {
 					break
 				}
 			}
-		default:
+			wh.Unlock()
+		case <-ticker.C:
 			if shutdown {
 				return
 			}
-			time.Sleep(time.Millisecond * 10)
 		}
 	}
 }
