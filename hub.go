@@ -72,12 +72,15 @@ func (wh *WebSocketHub) Run() {
 			}
 			wh.Unlock()
 		case client := <-wh.unregister:
+			wh.Lock()
 			if _, ok := wh.clients[client]; ok {
 				delete(wh.clients, client)
 				close(client.sendChannel)
 				close(client.readChannel)
 			}
+			wh.Unlock()
 		case msg := <-wh.broadcast:
+			wh.Lock()
 			if msg.EventName == "LogMessage" {
 				wh.logMessages = append(wh.logMessages, msg)
 			}

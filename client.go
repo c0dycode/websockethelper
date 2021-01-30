@@ -113,7 +113,7 @@ func (s *SocketClient) writePump() {
 			}
 		case <-ticker.C:
 			if err := s.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				break
+				return
 			}
 		}
 	}
@@ -142,7 +142,7 @@ func (s *SocketClient) readPump() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
-			break
+			return
 		}
 		time.Sleep(time.Millisecond * 25)
 	}
