@@ -26,7 +26,7 @@ var (
 
 // WebSocketHub keeps track of the connections and registers and unregisters them
 type WebSocketHub struct {
-	clients     map[*SocketClient]bool
+	clients     map[uint32]*SocketClient
 	register    chan *SocketClient
 	unregister  chan *SocketClient
 	broadcast   chan SocketSendMessage
@@ -44,7 +44,7 @@ func init() {
 func GetHub() *WebSocketHub {
 	if hub == nil {
 		hub = &WebSocketHub{
-			clients:    make(map[*SocketClient]bool),
+			clients:    make(map[uint32]*SocketClient),
 			register:   make(chan *SocketClient),
 			unregister: make(chan *SocketClient),
 			broadcast:  make(chan SocketSendMessage, 250),
@@ -64,17 +64,19 @@ func (wh *WebSocketHub) Run() {
 		select {
 		case client := <-wh.register:
 			wh.Lock()
-			wh.clients[client] = true
+			wh.clients[client.clientID] = client
 			client.callbacks = callbacks
 
-			for _, msg := range wh.logMessages {
-				client.sendChannel <- msg
+			if !client.internal {
+				for _, msg := range wh.logMessages {
+					client.sendChannel <- msg
+				}
 			}
 			wh.Unlock()
 		case client := <-wh.unregister:
 			wh.Lock()
-			if _, ok := wh.clients[client]; ok {
-				delete(wh.clients, client)
+			if _, ok := wh.clients[client.clientID]; ok {
+				delete(wh.clients, client.clientID)
 				close(client.sendChannel)
 				close(client.readChannel)
 			}
@@ -85,8 +87,16 @@ func (wh *WebSocketHub) Run() {
 				wh.logMessages = append(wh.logMessages, msg)
 			}
 			for client := range wh.clients {
+				if msg.Internal && client == 1337 {
+					if _, ok := wh.clients[1337]; ok {
+						wh.clients[1337].sendChannel <- msg
+						continue
+					}
+				} else if !msg.Internal && client == 1337 {
+					continue
+				}
 				select {
-				case client.sendChannel <- msg:
+				case wh.clients[client].sendChannel <- msg:
 				default:
 					break
 				}
@@ -110,7 +120,7 @@ func broadcastMessages(msgToSend *SocketSendMessage) {
 func RegisterCallback(eventName string, f func(SocketMessage)) {
 	for client := range hub.clients {
 		var found bool = false
-		if ac := client.callbacks[eventName]; ac != nil {
+		if ac := hub.clients[client].callbacks[eventName]; ac != nil {
 			for _, a := range ac {
 				if &a == &f {
 					found = true
@@ -118,7 +128,7 @@ func RegisterCallback(eventName string, f func(SocketMessage)) {
 			}
 		}
 		if !found {
-			client.callbacks[eventName] = append(client.callbacks[eventName], f)
+			hub.clients[client].callbacks[eventName] = append(hub.clients[client].callbacks[eventName], f)
 		}
 	}
 	callbacks[eventName] = append(callbacks[eventName], f)

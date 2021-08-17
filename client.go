@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
+	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 const (
@@ -27,9 +28,11 @@ type SocketClient struct {
 	callbacks   map[string][]func(SocketMessage)
 	hub         *WebSocketHub
 	conn        *websocket.Conn
+	internal    bool
+	clientID    uint32
 }
 
-// SocketMessage is the struct that we send and receive from the javascript side
+// SocketMessage is the struct that we receive
 //easyjson:json
 type SocketMessage struct {
 	EventName string `json:"eventName"`
@@ -37,12 +40,13 @@ type SocketMessage struct {
 	Error     string `json:"error"`
 }
 
-// SocketMessage is the struct that we send and receive from the javascript side
+// SocketSendMessage is the struct that we send
 //easyjson:json
 type SocketSendMessage struct {
 	EventName string `json:"eventName"`
 	Content   []byte `json:"content"`
 	Error     string `json:"error"`
+	Internal  bool
 }
 
 // ServeWS is the handler for requests to connect via websocket
@@ -64,6 +68,13 @@ func ServeWS(hub *WebSocketHub, w http.ResponseWriter, r *http.Request) {
 		hub:         hub,
 		conn:        ws,
 	}
+	if r.Header.Get("internal") != "" {
+		client.internal = true
+		client.clientID = 1337
+	} else {
+		client.clientID = uint32(rand.IntnRange(1338, 2000))
+	}
+
 	client.hub.register <- client
 
 	go client.writePump()
@@ -128,6 +139,7 @@ func (s *SocketClient) readPump() {
 		_, b, err := s.conn.ReadMessage()
 		if err == nil {
 			msg := SocketMessage{}
+			// log.Println(string(b))
 			err = json.Unmarshal(b, &msg)
 			if err == nil && len(s.readChannel) < channelSize {
 				hub.RLock()
@@ -137,6 +149,8 @@ func (s *SocketClient) readPump() {
 					}
 				}
 				hub.RUnlock()
+			} else {
+				log.Println(err)
 			}
 		} else {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
